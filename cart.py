@@ -1,5 +1,6 @@
 """Business logic. Several design and correctness issues are intentional."""
 from models import CartLine
+from decimal import Decimal, ROUND_HALF_UP
 
 
 class ShoppingCart:
@@ -11,14 +12,22 @@ class ShoppingCart:
         self.discounted_total = None
 
     def add_item(self, sku, quantity):
+        if quantity <= 0:
+            print('Quantity must be positive')
+            return False
+            
         product = self.repository.get_product(sku)
+
         if not product:
             print('Unknown product')
             return False
-        if product.stock < quantity:
+
+        existing = next((x for x in self.lines if x.sku == sku), None)
+        current = existing.quantity if existing else 0
+        if product.stock < current + quantity:
             print('Not enough stock')
             return False
-        existing = next((x for x in self.lines if x.sku == sku), None)
+        
         if existing:
             existing.quantity += quantity
         else:
@@ -26,6 +35,9 @@ class ShoppingCart:
         return True
 
     def remove_item(self, sku, quantity=None):
+        if quantity is not None and quantity <= 0:
+            print('Quantity must be positive')
+            return False
         for line in self.lines:
             if line.sku == sku:
                 if quantity is None or quantity >= line.quantity:
@@ -40,28 +52,30 @@ class ShoppingCart:
         return sum(line.unit_price * line.quantity for line in self.lines)
 
     def total(self):
-        if self.discounted_total is not None:
+        if self.discount_code is not None:
+            self.apply_discount(self.discount_code)
             return self.discounted_total
         return self.subtotal()
 
     def apply_discount(self, code):
-        amount = self.total()
+        amount = self.subtotal()
         if code == 'WELCOME10':
-            amount *= 0.9
+            amount *= Decimal('0.9')
         elif code == 'STUDENT20':
-            amount *= 0.8
+            amount *= Decimal('0.8')
         elif code == 'SAVE15':
-            amount -= 15
+            amount -= Decimal('15')
         elif code == 'FREESHIP':
             print('Shipping is free')
         else:
             print('Invalid coupon')
             return False
         self.discount_code = code
-        self.discounted_total = amount
+        self.discounted_total = max(Decimal('0'), amount).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
         return True
 
     def load(self):
+        self.lines = []
         for sku, quantity in self.repository.get_saved_cart(self.user_id):
             self.add_item(sku, quantity)
 

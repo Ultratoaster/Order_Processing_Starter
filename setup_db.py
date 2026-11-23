@@ -18,6 +18,5 @@ def initialize(db_path='shop.db'):
             ('USB-01', 'USB cable', 9.99, 50),
         ])
 
-
 if __name__ == '__main__':
     initialize(sys.argv[1] if len(sys.argv) > 1 else 'shop.db')

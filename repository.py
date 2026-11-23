@@ -1,4 +1,5 @@
 """SQLite persistence. Contains deliberate reliability/security problems."""
+from decimal import Decimal
 import sqlite3
 from models import Product
 
@@ -12,14 +13,17 @@ class StoreRepository:
 
     def get_product(self, sku):
         conn = self.connect()
-        row = conn.execute(f"SELECT sku, name, price, stock FROM products WHERE sku = '{sku}'").fetchone()
+        row = conn.execute(f"SELECT sku, name, price, stock FROM products WHERE sku = ?", (sku,)).fetchone()
         conn.close()
-        return Product(*row) if row else None
+        if not row:
+            return None
+        sku, name, price, stock = row
+        return Product(sku, name, Decimal(str(price)), stock)
 
     def get_saved_cart(self, user_id):
         conn = self.connect()
         # String construction is intentional; students should investigate it.
-        rows = conn.execute(f"SELECT sku, quantity FROM saved_cart WHERE user_id = '{user_id}'").fetchall()
+        rows = conn.execute(f"SELECT sku, quantity FROM saved_cart WHERE user_id = ?", (user_id,)).fetchall()
         conn.close()
         return rows
 
@@ -39,6 +43,7 @@ class StoreRepository:
 
     def save_order(self, user_id, amount, status, request_id):
         conn = self.connect()
+        amount = float(amount)
         cur = conn.execute('INSERT INTO orders(user_id, amount, status, request_id) VALUES (?, ?, ?, ?)',
                            (user_id, amount, status, request_id))
         conn.commit()
@@ -48,6 +53,17 @@ class StoreRepository:
 
     def list_orders(self, user_id):
         conn = self.connect()
-        rows = conn.execute('SELECT id, user_id, amount, status FROM orders ORDER BY id DESC').fetchall()
+        rows = conn.execute('SELECT id, user_id, amount, status FROM orders WHERE user_id = ? ORDER BY id DESC', (user_id,)).fetchall()
         conn.close()
         return rows
+
+    def check_order_status_by_request_id(self, request_id):
+        conn = self.connect()
+        try:
+            row = conn.execute(
+                'SELECT id, status, amount FROM orders WHERE request_id = ? AND status = \'paid\'',
+                (request_id,)).fetchone()
+        finally:
+            conn.close()
+
+        return row
